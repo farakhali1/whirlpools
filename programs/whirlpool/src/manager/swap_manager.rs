@@ -86,6 +86,7 @@ pub fn swap(
             amount_specified_is_input,
             a_to_b,
         )?;
+        println!("\tswap compution result: {:?}", swap_computation);
 
         if amount_specified_is_input {
             amount_remaining = amount_remaining
