@@ -19,6 +19,7 @@ pub struct PostSwapUpdate {
     pub next_liquidity: u128,
     pub next_tick_index: i32,
     pub next_sqrt_price: u128,
+    pub avg_trade_price: u128,
     pub next_fee_growth_global: u128,
     pub next_reward_infos: [WhirlpoolRewardInfo; NUM_REWARDS],
     pub next_protocol_fee: u64,
@@ -59,20 +60,44 @@ pub fn swap(
     let mut curr_liquidity = whirlpool.liquidity;
     let mut curr_protocol_fee: u64 = 0;
     let mut curr_array_index: usize = 0;
+    let mut avg_trade_price: u128 = curr_sqrt_price;
     let mut curr_fee_growth_global_input = if a_to_b {
         whirlpool.fee_growth_global_a
     } else {
         whirlpool.fee_growth_global_b
     };
-
     while amount_remaining > 0 && sqrt_price_limit != curr_sqrt_price {
-        let (next_array_index, next_tick_index) = swap_tick_sequence
-            .get_next_initialized_tick_index(
-                curr_tick_index,
-                tick_spacing,
-                a_to_b,
-                curr_array_index,
-            )?;
+        let swap_update_out = swap_tick_sequence.get_next_initialized_tick_index(
+            curr_tick_index,
+            tick_spacing,
+            a_to_b,
+            curr_array_index,
+        );
+        let (mut next_array_index, mut next_tick_index) = (0, 0);
+        match swap_update_out {
+            Ok(swap_update) => {
+                next_array_index = swap_update.0;
+                next_tick_index = swap_update.1;
+            }
+            Err(_err) => {
+                let (amount_a, amount_b) = if a_to_b == amount_specified_is_input {
+                    (amount - amount_remaining, amount_calculated)
+                } else {
+                    (amount_calculated, amount - amount_remaining)
+                };
+                return Ok(PostSwapUpdate {
+                    amount_a,
+                    amount_b,
+                    next_liquidity: curr_liquidity,
+                    next_tick_index: curr_tick_index,
+                    next_sqrt_price: curr_sqrt_price,
+                    avg_trade_price,
+                    next_fee_growth_global: curr_fee_growth_global_input,
+                    next_reward_infos,
+                    next_protocol_fee: curr_protocol_fee,
+                });
+            }
+        }
 
         let (next_tick_sqrt_price, sqrt_price_target) =
             get_next_sqrt_prices(next_tick_index, sqrt_price_limit, a_to_b);
@@ -86,7 +111,6 @@ pub fn swap(
             amount_specified_is_input,
             a_to_b,
         )?;
-        println!("\tswap compution result: {:?}", swap_computation);
 
         if amount_specified_is_input {
             amount_remaining = amount_remaining
@@ -179,7 +203,7 @@ pub fn swap(
         } else if swap_computation.next_price != curr_sqrt_price {
             curr_tick_index = tick_index_from_sqrt_price(&swap_computation.next_price);
         }
-
+        avg_trade_price = (avg_trade_price + curr_sqrt_price) / 2;
         curr_sqrt_price = swap_computation.next_price;
     }
 
@@ -196,7 +220,7 @@ pub fn swap(
     };
 
     // Log delta in fee growth to track pool usage over time with off-chain analytics
-    msg!("fee_growth: {}", fee_growth);
+     msg!("fee_growth: {}", fee_growth);
 
     Ok(PostSwapUpdate {
         amount_a,
@@ -204,6 +228,7 @@ pub fn swap(
         next_liquidity: curr_liquidity,
         next_tick_index: curr_tick_index,
         next_sqrt_price: curr_sqrt_price,
+        avg_trade_price,
         next_fee_growth_global: curr_fee_growth_global_input,
         next_reward_infos,
         next_protocol_fee: curr_protocol_fee,
