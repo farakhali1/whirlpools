@@ -60,7 +60,7 @@ pub fn swap(
     let mut curr_liquidity = whirlpool.liquidity;
     let mut curr_protocol_fee: u64 = 0;
     let mut curr_array_index: usize = 0;
-    let mut avg_trade_price: u128 = curr_sqrt_price;
+    let mut avg_trade_price: u128 = 0;
     let mut curr_fee_growth_global_input = if a_to_b {
         whirlpool.fee_growth_global_a
     } else {
@@ -203,7 +203,11 @@ pub fn swap(
         } else if swap_computation.next_price != curr_sqrt_price {
             curr_tick_index = tick_index_from_sqrt_price(&swap_computation.next_price);
         }
-        avg_trade_price = (avg_trade_price + curr_sqrt_price) / 2;
+        if avg_trade_price != 0 {
+            avg_trade_price = (avg_trade_price + sqrt_price_target) / 2;
+        } else {
+            avg_trade_price = sqrt_price_target;
+        }
         curr_sqrt_price = swap_computation.next_price;
     }
 
@@ -220,7 +224,7 @@ pub fn swap(
     };
 
     // Log delta in fee growth to track pool usage over time with off-chain analytics
-     msg!("fee_growth: {}", fee_growth);
+    msg!("fee_growth: {}", fee_growth);
 
     Ok(PostSwapUpdate {
         amount_a,
@@ -233,6 +237,19 @@ pub fn swap(
         next_reward_infos,
         next_protocol_fee: curr_protocol_fee,
     })
+}
+
+pub fn pricemath_sqrt_price_x64_to_price(
+    sqrt_price_x64: u128,
+    decimals_a: i8,
+    decimals_b: i8,
+) -> f64 {
+    let sqrt_price_x64_f64 = sqrt_price_x64 as f64;
+
+    let price = (sqrt_price_x64_f64 / 2.0_f64.powi(64)).powi(2)
+        * 10.0_f64.powi((decimals_a - decimals_b) as i32);
+
+    price
 }
 
 fn calculate_fees(
