@@ -224,7 +224,7 @@ pub fn swap(
     };
 
     // Log delta in fee growth to track pool usage over time with off-chain analytics
-    msg!("fee_growth: {}", fee_growth);
+    //  msg!("fee_growth: {}", fee_growth);
 
     Ok(PostSwapUpdate {
         amount_a,
@@ -296,13 +296,13 @@ fn calculate_update(
     } else {
         tick.liquidity_net
     };
-
+    
     let update =
         next_tick_cross_update(tick, fee_growth_global_a, fee_growth_global_b, reward_infos)?;
 
     // Update the global liquidity to reflect the new current tick
     let next_liquidity = add_liquidity_delta(liquidity, signed_liquidity_net)?;
-
+   
     Ok((update, next_liquidity))
 }
 
